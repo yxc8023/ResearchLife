@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>矩阵运算 Demo</title>
+    <script src="numeric.min.js"></script>
+	<script src="Calculate.js"></script>
+    <script>
+      
+  
+	  // 一阶（仿射）配准函数
+	function firstRegistration(originalMap, targetMap) {
+	  // 创建矩阵 A 和 B
+	  var A = [];
+	  var B = [];
+	  for (var i = 0; i < originalMap.length; i++) {
+		var x = originalMap[i][0];
+		var y = originalMap[i][1];
+	
+		A.push([x, y,1,0,0,0]);
+		A.push([0,0,0,x, y, 1]);
+		B.push(targetMap[i][0]);
+		B.push(targetMap[i][1]);
+	  }
+
+	  // 计算二阶多项式系数
+
+	  var coefficients = leastSquares(A,B);
+
+	  return coefficients;
+	}
+	
+	 // 二阶多项式配准函数
+	function polynomialRegistration(originalMap, targetMap) {
+	  // 创建矩阵 A 和 B
+	  var A = [];
+	  var B = [];
+	  for (var i = 0; i < originalMap.length; i++) {
+		var x = originalMap[i][0];
+		var y = originalMap[i][1];
+		var x2 = x * x;
+		var y2 = y * y;
+		A.push([x, y, x * y, x2, y2,1,0,0,0,0,0,0]);
+		A.push([0,0,0,0,0,0,x, y, x * y, x2, y2,1]);
+		B.push(targetMap[i][0]);
+		B.push(targetMap[i][1]);
+	  }
+
+	  // 计算二阶多项式系数
+
+	  var coefficients = leastSquares(A,B);
+
+	  return coefficients;
+	}
+	  
+      //配准
+      function geoReferencing(sourcePoints, targetPoints,type=1) {
+          // 定义转换后的坐标数组
+        var transformedCoordinates = []
+      
+	  
+        // 使用最小二乘法求解矩阵X
+        var X =[];    
+      
+        switch(type){
+		case 1:
+		X= firstRegistration(sourcePoints, targetPoints)	;
+		// 对每个坐标进行仿射变换
+        for (var i = 0; i < sourcePoints.length; i++) {
+          var x = sourcePoints[i][0]
+          var y = sourcePoints[i][1]
+      
+          // 计算转换后的坐标
+          var transformedX = X[0] * x + X[1] * y + X[2]
+          var transformedY = X[3] * x + X[4] * y + X[5]
+		 
+      
+          transformedCoordinates.push([transformedX, transformedY])
+        }
+      
+        console.log('一阶（仿射）转换后的坐标：', transformedCoordinates)
+			break;
+			case 2:
+		  X = polynomialRegistration(sourcePoints, targetPoints);
+		
+			// 对每个坐标进行仿射变换
+			for (var i = 0; i < sourcePoints.length; i++) {
+			  var x = sourcePoints[i][0]
+			  var y = sourcePoints[i][1]
+			 var x2 = x * x;
+			 var y2 = y * y;
+			  // 计算转换后的坐标
+			  var transformedX = X[0] * x + X[1] * y + X[2]*x*y +X[3]*x2 +X[4]*y2 + X[5]
+			  var transformedY = X[6] * x + X[7] * y + X[8]*x*y +X[9]*x2 +X[10]*y2 + X[11]
+			 
+		  
+			  transformedCoordinates.push([transformedX, transformedY])
+			}
+      
+           console.log('二阶多项式转换后的坐标：', transformedCoordinates)
+			break;
+			default:
+			 alert("请选择转换类型！");
+			 break;
+		}
+        
+      
+        // 计算坐标转换的误差
+        var errors = []
+		var sourceXs=[]
+		var sourceYs=[]
+		var targetXs=[]
+		var targetYs=[]
+		
+        for (var i = 0; i < targetPoints.length; i++) {
+          var sourceX = targetPoints[i][0]
+          var sourceY = targetPoints[i][1]
+		  
+          var targetX = transformedCoordinates[i][0]
+          var targetY = transformedCoordinates[i][1]
+		  sourceXs.push(sourceX)
+		  sourceYs.push(sourceY)
+		  targetXs.push(targetX)
+		  targetYs.push(targetY)
+      
+          var errorX = Math.abs(targetX - sourceX)
+          var errorY = Math.abs(targetY - sourceY)
+          var error = Math.sqrt(errorX * errorX + errorY * errorY)
+      
+          errors.push(error)
+          console.log(i + '误差：', error)
+        }
+        console.log('均方根误差：', error)
+        // 计算真实值的平均值
+      
+        //err = matrixSubtract(BL2xyMatrix(targetPoints), BL2xyMatrix(transformedCoordinates))
+		err = roundArrayToEightDecimalPlaces(matrixSubtract((targetPoints), (transformedCoordinates)))
+        document.getElementById('Error').textContent = '误差(大地坐标系，单位：度)：\n' + JSON.stringify(err).replace(/],/g, '],\n')
+		err = roundArrayToEightDecimalPlaces(matrixSubtract(BL2xyMatrix(targetPoints), BL2xyMatrix(transformedCoordinates)),2)
+		document.getElementById('Error2').textContent = '误差(高斯坐标系，单位：米)：\n' + JSON.stringify(err).replace(/],/g, '],\n')
+        document.getElementById('R2').textContent = '\nX-R2:' + calculateR2(sourceXs,targetXs)+ '\nY-R2:' + calculateR2(sourceYs,targetYs)
+      
+        return transformedCoordinates
+      }
+    
+	   
+      // 当点击按钮时，执行
+      function performMatrix() {
+        const type = parseInt(document.getElementById('operation').value)
+        // 获取用户输入的矩阵数据
+        const matrixAInput = document.getElementById('matrixA').value
+        const matrixBInput = document.getElementById('matrixB').value
+        const matrixCInput = document.getElementById('matrixC').value
+        const matrixDInput = document.getElementById('matrixD').value
+        const selectValueInput = document.getElementById('operation2').value
+        // 将字符串转换为矩阵数据
+        const matrixA = matrixAInput.trim() === '' ? null : JSON.parse(matrixAInput)
+        const matrixB = matrixBInput.trim() === '' ? null : JSON.parse(matrixBInput)
+        const matrixC = matrixCInput.trim() === '' ? null : JSON.parse(matrixCInput)
+        const matrixD = matrixDInput.trim() === '' ? null : JSON.parse(matrixDInput)
+        const selectValue = selectValueInput.trim() === '' ? null : JSON.parse(selectValueInput)
+        try {
+          // 执行矩阵加法
+      
+          let resultMatrix = []
+          switch (type) {
+            case 1:
+              resultMatrix = matrixAdd(matrixA, matrixB)
+              break
+            case 2:
+              resultMatrix = matrixSubtract(matrixA, matrixB)
+              break
+            case 3:
+              resultMatrix = matrixMultiply(matrixA, matrixB)
+              break
+            case 4:
+              resultMatrix = matrixInverse(matrixA)
+              break
+            case 5:
+              resultMatrix = geoReferencing(matrixA, matrixB,selectValue)
+              break
+            default:
+              resultElement.textContent = '输入有误！'
+          }
+          // 显示结果
+          const resultElement = document.getElementById('result')
+          resultElement.textContent = JSON.stringify(resultMatrix).replace(/],/g, '],\n')
+        } catch (error) {
+          // 显示错误信息
+          const resultElement = document.getElementById('result')
+          resultElement.textContent = '错误信息: ' + error.message
+        }
+      }
+      
+      function handleSelectChange() {
+        const resultElement = document.getElementById('result')
+        resultElement.textContent = ''
+        const selectedValue = parseInt(document.getElementById('operation').value)
+		document.getElementsByClassName('operation2')[0].style.display = 'none'
+		document.getElementsByClassName('matrixC')[0].style.display = 'none'
+        document.getElementsByClassName('matrixD')[0].style.display = 'none'
+        document.getElementsByClassName('matrixD')[1].style.display = 'none'
+        if (selectedValue == 4) {
+          document.getElementsByClassName('matrixB')[0].style.display = 'none'          	 
+        } else if (selectedValue == 5) {
+          document.getElementsByClassName('matrixB')[0].style.display = 'block'         
+		  document.getElementsByClassName('operation2')[0].style.display = 'block'
+        } else {
+          document.getElementsByClassName('matrixB')[0].style.display = 'block'        
+        }
+      }
+	
+	function BL2xyMatrix(Matrix) {
+	  var Data = [];
+	  for (var i = Matrix.length - 1; i >= 0; i--) {
+	  var result = BL2xy(Matrix[i][1], Matrix[i][0],120,3);
+		Data.unshift([result.y,result.x]);
+	  }
+	  return Data;
+	}
+
+	
+	  
+    </script>
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      
+      .container {
+        display: flex;
+        justify-content: space-between;
+        align-items: stretch;
+      }
+      
+      .left {
+        flex: 1;
+        background-color: #f0f0f0;
+        padding: 20px;
+      }
+      
+      .right {
+        flex: 2;
+        background-color: #e0e0e0;
+        padding: 20px;
+      }
+      textarea {
+        width: 20em;
+        height: 10em;
+      }
+      body,
+      select,
+      button,
+      textarea {
+        font-size: 20px;
+        font-weight: bold;
+      }
+      .matrixC,
+      .matrixD,
+	  .operation2
+	  {
+        display: none;
+      }
+	  
+	  
+    </style>
+  </head>
+  <body>
+    <h1>矩阵运算 Demo</h1>
+    <!-- 使用div元素创建左右布局 -->
+    <div class="container">
+      <div class="left">
+        <!-- 左侧内容 -->
+        <div>
+          操作类型：<select id="operation" onchange="handleSelectChange()">
+            <option value="1">加</option>
+            <option value="2">减</option>
+            <option value="3">乘</option>
+            <option value="4">求逆</option>
+            <option value="5">配准</option>
+          </select>
+		
+        </div>
+		<div class="operation2">
+		  转换类型：<select id="operation2" onchange="">
+            <option value="1" selected>一阶多项式(仿射)</option>
+            <option value="2">二阶多项式</option>
+            
+          </select>
+		 </div>
+        <br />
+        <span class="matrixD">注：矩阵A为原始坐标数组，B为目标坐标数组。</span>
+        <div class="matrixA">
+          XY-来源:<br/><textarea id="matrixA" rows="4" cols="5" placeholder="输入 矩阵 (如 [[1,2],[3,4]])">  [  
+    [43.04275701, -95.45093458],  
+     [1033.351168, -100.6630841],  
+    [20.28068291, -1499.553965],  
+    [1031.513421, -1473.685673],  
+    [521.5186539, -1512.115677],  
+     [602.9893027, -29.55902613]  
+   
+]
+</textarea>
+        </div>
+        <br />
+        <div class="matrixB">
+          XY-地图:<br/><textarea id="matrixB" rows="4" cols="5" placeholder="输入 矩阵 (如 [[5,6],[7,8]])">[  
+    [106.755854, 39.37347297],  
+    [116.3803201, 33.77900898],  
+    [102.8952608, 26.99980101],  
+    [113.9734559, 26.61246702],  
+    [107.8731048, 26.50441425],  
+    [112.953315, 37.19452491]  
+]</textarea>
+        </div>
+        <br />
+        <div class="matrixC">
+          矩阵C:<textarea id="matrixC" rows="4" cols="5" placeholder="输入 矩阵 (如 [[10,11],[12,13]])"></textarea>
+        </div>
+        <br />
+        <div class="matrixD">
+          矩阵D:<textarea id="matrixD" rows="4" cols="5" placeholder="输入 矩阵  (如 [[10,11],[12,13]])"> </textarea>
+        </div>
+        <br />
+      </div>
+      <div class="right">
+        <button onclick="performMatrix()">计算结果</button>
+        <br />
+        <pre id="result"></pre>
+        <pre id="Error"></pre>
+		<pre id="Error2"></pre>
+        <pre id="R2"></pre>
+      </div>
+    </div>
+  </body>
+</html>
